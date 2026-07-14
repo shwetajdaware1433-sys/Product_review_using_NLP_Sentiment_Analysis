@@ -15,7 +15,7 @@ from nltk.stem import WordNetLemmatizer
 
 @st.cache_data
 def load_reviews():
-    df = pd.read_csv("product_reviews.csv")   
+    df = pd.read_excel("product_reviews.xlsx")   
     return df
 
 reviews_df = load_reviews()
