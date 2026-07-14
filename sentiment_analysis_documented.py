@@ -8,7 +8,6 @@ import pandas as pd
 
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 # -------------------------------------------------------
 # LOAD DATASET REVIEWS
@@ -96,60 +95,15 @@ def load_models():
 
     model_dir = Path("models")
 
-    models = {
+    model = joblib.load(model_dir / "model.pkl")
 
-        "Logistic Regression":
-            joblib.load(model_dir / "logistic_model.pkl"),
+    tfidf = joblib.load(model_dir / "tfidf_vectorizer.pkl")
 
-        "Naive Bayes":
-            joblib.load(model_dir / "nb_model.pkl"),
-
-        "Random Forest":
-            joblib.load(model_dir / "rf_model.pkl"),
-
-        "SVM":
-            joblib.load(model_dir / "svm_model.pkl"),
-
-        "XGBoost":
-            joblib.load(model_dir / "xgb_model.pkl"),
-
-        "ANN":
-            joblib.load(model_dir / "ann_model.pkl")
-
-    }
-
-    tfidf = joblib.load(model_dir / "tfidf.pkl")
-
-    encoder = joblib.load(model_dir / "label_encoder.pkl")
-
-    vader = SentimentIntensityAnalyzer()
-
-    return models, tfidf, encoder, vader
+    return model, tfidf
 
 
-models, tfidf, encoder, vader = load_models()
-
-# -------------------------------------------------------
-# SIDEBAR
-# -------------------------------------------------------
-
-st.sidebar.title("Model Selection")
-
-selected_model = st.sidebar.selectbox(
-
-    "Choose Model",
-
-    [
-        "Logistic Regression",
-        "Naive Bayes",
-        "Random Forest",
-        "SVM",
-        "VADER",
-        "XGBoost",
-        "ANN"
-    ]
-
-)
+model, tfidf = load_models()
+            
 
 # -------------------------------------------------------
 # INPUT
@@ -190,242 +144,56 @@ if st.button("Predict Sentiment"):
         cleaned = clean_text(review)
         vector = tfidf.transform([cleaned])
 
-        results = []
+        prediction = model.predict(vector)[0]
 
-        # ------------------------------------
-        # Run every ML model
-        # ------------------------------------
+        confidence = model.predict_proba(vector).max()
 
-        for model_name, model in models.items():
+        st.markdown("## Prediction Result")
 
-            prediction = None
-            confidence = None
-
-            if model_name == "XGBoost":
-
-                pred = model.predict(vector)
-                prediction = encoder.inverse_transform(pred)[0]
-
-            else:
-
-                prediction = model.predict(vector)[0]
-
-            probabilities = None
-
-            if hasattr(model, "predict_proba"):
-
-                probabilities = model.predict_proba(vector)[0]
-                confidence = float(probabilities.max())
-
-            elif hasattr(model, "decision_function"):
-
-                import numpy as np
-
-                score = model.decision_function(vector)
-
-                if score.ndim == 1:
-                    confidence = float(
-                        1 / (1 + np.exp(-abs(score[0])))
-                    )
-
-                else:
-                    exp_scores = np.exp(score)
-                    probs = exp_scores / exp_scores.sum(axis=1, keepdims=True)
-                    confidence = float(probs.max())
-
-            else:
-                confidence = 0.0
-
-            results.append({
-
-                "Model": model_name,
-                "Prediction": prediction,
-                "Confidence": confidence
-
-            })
-
-        # ------------------------------------
-        # Run VADER
-        # ------------------------------------
-
-        vader_score = vader.polarity_scores(review)
-
-        if vader_score["compound"] >= 0.05:
-            vader_prediction = "positive"
-
-        elif vader_score["compound"] <= -0.05:
-            vader_prediction = "negative"
-
-        else:
-            vader_prediction = "neutral"
-
-        results.append({
-
-            "Model": "VADER",
-            "Prediction": vader_prediction,
-            "Confidence": abs(vader_score["compound"])
-
-        })
-
-        # ------------------------------------
-        # Convert to dataframe
-        # ------------------------------------
-
-        result_df = pd.DataFrame(results)
-
-        result_df["Confidence %"] = (
-            result_df["Confidence"] * 100
-        ).round(2)
-
-        result_df = result_df.sort_values(
-            by="Confidence",
-            ascending=False
-        ).reset_index(drop=True)
-
-        # ------------------------------------
-        # Best model
-        # ------------------------------------
-
-        best = result_df.iloc[0]
-
-        st.markdown("## 🏆 Best Performing Model")
-
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
 
         col1.metric(
-            "Best Model",
-            best["Model"]
+            "Sentiment",
+            str(prediction).upper()
         )
 
         col2.metric(
-            "Prediction",
-            best["Prediction"].upper()
-        )
-
-        col3.metric(
             "Confidence",
-            f'{best["Confidence"]:.2%}'
+            f"{confidence:.2%}"
         )
 
         st.success(
-            f"**{best['Model']}** produced the highest confidence "
-            f"({best['Confidence']:.2%}) for this review."
+            f"The review is predicted as **{prediction.upper()}** "
+            f"with **{confidence:.2%}** confidence."
         )
 
-        st.markdown("---")
+        # Probability Distribution
+        probabilities = model.predict_proba(vector)[0]
 
-        # ------------------------------------
-        # Comparison Table
-        # ------------------------------------
+        prob_df = pd.DataFrame({
+            "Sentiment": model.classes_,
+            "Probability": probabilities
+        })
 
-        st.subheader("Model Comparison")
-
-        st.dataframe(
-
-            result_df[
-                ["Model", "Prediction", "Confidence %"]
-            ],
-
-            use_container_width=True
-
-        )
-
-        # ------------------------------------
-        # Confidence Chart
-        # ------------------------------------
-
-        st.subheader("Confidence Comparison")
-
-        chart_df = result_df.copy()
-
-        chart_df = chart_df.set_index("Model")
+        st.subheader("Probability Distribution")
 
         st.bar_chart(
-            chart_df["Confidence %"],
+            prob_df,
+            x="Sentiment",
+            y="Probability",
             use_container_width=True
         )
 
-        # ------------------------------------
-        # Agreement Summary
-        # ------------------------------------
-
-        st.subheader("Prediction Agreement")
-
-        agree = (
-            result_df.groupby("Prediction")
-            .size()
-            .reset_index(name="Votes")
-            .sort_values(
-                by="Votes",
-                ascending=False
-            )
-        )
-
-        st.dataframe(
-            agree,
-            use_container_width=True
-        )
-
-        winner = agree.iloc[0]
-
-        st.info(
-
-            f"Majority Vote Prediction: **{winner['Prediction'].upper()}** "
-            f"({winner['Votes']} out of {len(result_df)} models)"
-
-        )
-
-        # ------------------------------------
-        # Probability of Selected Model
-        # ------------------------------------
-
-        if selected_model != "VADER":
-
-            model = models[selected_model]
-
-            if hasattr(model, "predict_proba"):
-
-                probs = model.predict_proba(vector)[0]
-
-                prob_df = pd.DataFrame({
-
-                    "Sentiment": encoder.classes_,
-                    "Probability": probs
-
-                })
-
-                st.subheader(
-                    f"{selected_model} Probability Distribution"
-                )
-
-                st.bar_chart(
-
-                    prob_df,
-
-                    x="Sentiment",
-
-                    y="Probability",
-
-                    use_container_width=True
-
-                )
-
+  
 # -------------------------------------------------------
 # MODEL INFORMATION
 # -------------------------------------------------------
 
-st.sidebar.markdown("---")
-
-st.sidebar.write("### Available Models")
-
 st.sidebar.write("""
+### Model Used
+
 - Logistic Regression
-- Naive Bayes
-- Random Forest
-- SVM
-- VADER
-- XGBoost
-- ANN
+- TF-IDF Vectorizer
 """)
 
 st.sidebar.markdown("---")
