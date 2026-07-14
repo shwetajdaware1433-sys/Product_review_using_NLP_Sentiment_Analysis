@@ -192,4 +192,3 @@ This application predicts the sentiment of product reviews using a trained Logis
 
 Users can select a review from the dataset or enter their own custom review for prediction.
 """)
-)
