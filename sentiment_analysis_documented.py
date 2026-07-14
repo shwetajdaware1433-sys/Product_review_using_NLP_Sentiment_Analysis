@@ -104,24 +104,15 @@ model, tfidf = load_models()
 
 st.subheader("Choose a Review or Type Your Own")
 
-if "review_text" not in st.session_state:
-    st.session_state.review_text = ""
-
-def update_review():
-    st.session_state.review_text = st.session_state.selected_review
-
 selected_review = st.selectbox(
     "Select a review from the dataset",
-    options=[""] + reviews_df["clean_review"].tolist(),
-    key="selected_review",
-    on_change=update_review
+    options=[""] + reviews_df["clean_review"].dropna().tolist()
 )
 
-review = st.text_area(
+custom_review = st.text_area(
     "Or type your own review",
-    key="review_text",
-    height=150,
-    placeholder="Example: This mobile phone is really good..."
+    placeholder="Example: This mobile phone is really good...",
+    height=150
 )
 # -------------------------------------------------------
 # PREDICTION
@@ -129,55 +120,57 @@ review = st.text_area(
 
 if st.button("Predict Sentiment"):
 
-    if review.strip() == "":
-        st.warning("Please enter a review.")
+    if custom_review.strip():
+        review = custom_review
+
+    elif selected_review:
+        review = selected_review
 
     else:
+        st.warning("Please select a review or type your own.")
+        st.stop()
 
-        cleaned = clean_text(review)
-        vector = tfidf.transform([cleaned])
+    cleaned = clean_text(review)
+    vector = tfidf.transform([cleaned])
 
-        prediction = model.predict(vector)[0]
+    prediction = model.predict(vector)[0]
 
-        confidence = model.predict_proba(vector).max()
+    confidence = model.predict_proba(vector).max()
 
-        st.markdown("## Prediction Result")
+    st.markdown("## Prediction Result")
 
-        col1, col2 = st.columns(2)
+    col1, col2 = st.columns(2)
 
-        col1.metric(
-            "Sentiment",
-            str(prediction).upper()
-        )
+    col1.metric(
+        "Sentiment",
+        str(prediction).upper()
+    )
 
-        col2.metric(
-            "Confidence",
-            f"{confidence:.2%}"
-        )
+    col2.metric(
+        "Confidence",
+        f"{confidence:.2%}"
+    )
 
-        st.success(
-            f"The review is predicted as **{prediction.upper()}** "
-            f"with **{confidence:.2%}** confidence."
-        )
+    st.success(
+        f"The review is predicted as **{prediction.upper()}** "
+        f"with **{confidence:.2%}** confidence."
+    )
 
-        # Probability Distribution
-        probabilities = model.predict_proba(vector)[0]
+    probabilities = model.predict_proba(vector)[0]
 
-        prob_df = pd.DataFrame({
-            "Sentiment": model.classes_,
-            "Probability": probabilities
-        })
+    prob_df = pd.DataFrame({
+        "Sentiment": model.classes_,
+        "Probability": probabilities
+    })
 
-        st.subheader("Probability Distribution")
+    st.subheader("Probability Distribution")
 
-        st.bar_chart(
-            prob_df,
-            x="Sentiment",
-            y="Probability",
-            use_container_width=True
-        )
-
-  
+    st.bar_chart(
+        prob_df,
+        x="Sentiment",
+        y="Probability",
+        use_container_width=True
+    )  
 # -------------------------------------------------------
 # MODEL INFORMATION
 # -------------------------------------------------------
@@ -193,8 +186,10 @@ st.sidebar.markdown("---")
 
 st.sidebar.info(
 """
-This application loads pre-trained models.
-No model training occurs during startup,
-making the application much faster.
-"""
+### About this App
+
+This application predicts the sentiment of product reviews using a trained Logistic Regression model and TF-IDF text features.
+
+Users can select a review from the dataset or enter their own custom review for prediction.
+""")
 )
