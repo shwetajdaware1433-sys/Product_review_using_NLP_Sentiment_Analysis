@@ -29,7 +29,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("Sentiment Analysis using Multiple Models")
+st.title("Sentiment Analysis of Product Reviews")
 
 
 # -------------------------------------------------------
