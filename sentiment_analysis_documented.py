@@ -31,12 +31,6 @@ st.set_page_config(
 
 st.title("Sentiment Analysis using Multiple Models")
 
-st.markdown(
-"""
-Choose a Machine Learning model from the sidebar and
-predict the sentiment of a product review.
-"""
-)
 
 # -------------------------------------------------------
 # DOWNLOAD NLTK DATA ONLY IF REQUIRED
@@ -93,11 +87,10 @@ def clean_text(text):
 @st.cache_resource
 def load_models():
 
-    model_dir = Path("models")
 
-    model = joblib.load(model_dir / "model.pkl")
+    model = joblib.load("model.pkl")
 
-    tfidf = joblib.load(model_dir / "tfidf_vectorizer.pkl")
+    tfidf = joblib.load( "tfidf_vectorizer.pkl")
 
     return model, tfidf
 
